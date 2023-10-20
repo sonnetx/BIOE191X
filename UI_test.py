@@ -1,5 +1,4 @@
 import streamlit as st
-import praw
 import streamlit as st
 import gspread
 import json
@@ -11,13 +10,6 @@ gc = gspread.service_account(filename='llms-for-misinformation-196fdd9cebe7.json
 
 # Public Google Sheet URL (replace with your URL)
 sheet_url = 'https://docs.google.com/spreadsheets/d/1Srh7lQffIXZQEJA0eBImE9LiTf0lJWZ-cvKuaDmqI7Y/edit'
-
-# Initialize PRAW with your credentials
-reddit = praw.Reddit(
-    client_id="qyYZWa4JQUpJrIl2-1Xqhg",
-    client_secret="KVRdupYHoEJuIib7MyTc7IqfFtjqTw",
-    user_agent="Dense_Western_2642",
-)
 
 # Define CSS for styling your app
 css = """
