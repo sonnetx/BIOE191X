@@ -71,69 +71,6 @@ def display_comments(comment, level, parent_comment_author):
         display_comments(reply, level + 1, comment.get('author'))
     st.write('</div>', unsafe_allow_html=True)
 
-# Define a function to display the post and collect user input
-def display_post_and_collect_input(random_post):
-    col1, col2 = st.columns(2)
-
-    with col1:
-        st.write(f"Title: {random_post.get('title')}")
-        st.write("Post ID:", random_post.get('id'))
-        st.write("Author:", random_post.get('author'))
-
-        permalink = random_post.get('permalink')
-        base_url = "https://www.reddit.com"
-        full_url = base_url + permalink
-        st.write("URL:", full_url)
-
-        # Display the post content
-        st.write("Post Content:", random_post.get('selftext'))
-
-        st.write("Comments:")
-        for comment in random_post.get('comments'):
-            display_comments(comment, level=0, parent_comment_author=random_post.get('author'))
-
-    with col2:
-        postID = st.text_input('Reddit Post ID', value=random_post.get('id'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
-        st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: center;} </style>', unsafe_allow_html=True)
-        choose1 = st.radio("To the best of your knowledge is this truthful?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-        choose2 = st.radio("If false how harmful would this information be?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-        choose3 = st.radio("Does this information come from supported information (opt)?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-        choose4 = st.radio("Does this response answer the initial question?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-        choose5 = st.radio("Does response show evidence of reasoning?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-
-        user_input = {"Username": userID, "Reddit Post ID": postID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
-
-        key = (userID, postID)  # Use a tuple as the key
-
-        if st.button("Submit"):
-            if user_input:
-                session_state.set(key, user_input)
-                st.success(f"Data '{user_input}' added to the session with key {key}")
-
-        delete_options = list(session_state._state.keys())  # Get the keys for delete options
-        delete_options.insert(0, 'None')  # Add 'None' as the default option
-        delete_key = st.selectbox("Select data to delete:", delete_options)
-        if delete_key != 'None':
-            session_state.delete(delete_key)
-            st.success(f"Data with key {delete_key} deleted from the session")
-
-        # Display the session data
-        st.write("Session Data:")
-        if session_state._state:
-            for key, data in session_state._state.items():
-                st.write(f"Key: {key}, Data: {data}")
-
-        # When you want to export user input to Google Sheets
-        if st.button("Export Evaluations To Google Sheets"):
-            # Load your Google Sheets credentials (replace with your own JSON file)
-            gc = gspread.service_account(filename="llms-for-misinformation-196fdd9cebe7.json")
-
-            # Iterate through all the user inputs in the session and update/append them to Google Sheets
-            for key, user_input in session_state._state.items():
-                update_or_append_data(gc, sheet_url, user_input)
-
-            st.success("Data successfully added to Google Sheets.")
-
 # Function to find and update a row based on userID and postID
 def update_or_append_data(gc, sheet_url, user_input):
     # Open the Google Sheet by URL
