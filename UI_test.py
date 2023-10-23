@@ -104,7 +104,7 @@ def load_random_post(selected_subreddit):
         all_posts = data[selected_subreddit]
         if all_posts:
             # Filter out posts with no comments
-            valid_posts = [post for post in all_posts if post.get('comments')]
+            valid_posts = [post for post in all_posts if post.get('comments') and not all(comment['author'] == 'AutoModerator' or comment['author'] == 'None' for comment in post['comments'])]
             if valid_posts:
                 random_post = random.choice(valid_posts)
                 return random_post
