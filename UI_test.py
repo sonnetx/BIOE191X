@@ -1,7 +1,7 @@
 import streamlit as st
-import streamlit as st
 import gspread
 import json
+import random
 
 st.set_page_config(page_title='Label Medical Misinformation', page_icon=':face_with_thermometer:', layout='wide')
 
@@ -62,7 +62,7 @@ class SessionState:
 # Create a session state
 session_state = SessionState(st.session_state)
 
-# Define a function to display comments recursively in a threaded format
+# Function to display comments recursively in a threaded format
 def display_comments(comment, level, parent_comment_author):
     st.write('<div class="comment">', unsafe_allow_html=True)
     st.write(f"**{comment.get('author')}** (Reply to {parent_comment_author}):", unsafe_allow_html=True)
@@ -70,6 +70,69 @@ def display_comments(comment, level, parent_comment_author):
     for reply in comment.get('replies'):
         display_comments(reply, level + 1, comment.get('author'))
     st.write('</div>', unsafe_allow_html=True)
+
+# Define a function to display the post and collect user input
+def display_post_and_collect_input(random_post):
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write(f"Title: {random_post.get('title')}")
+        st.write("Post ID:", random_post.get('id'))
+        st.write("Author:", random_post.get('author'))
+
+        permalink = random_post.get('permalink')
+        base_url = "https://www.reddit.com"
+        full_url = base_url + permalink
+        st.write("URL:", full_url)
+
+        # Display the post content
+        st.write("Post Content:", random_post.get('selftext'))
+
+        st.write("Comments:")
+        for comment in random_post.get('comments'):
+            display_comments(comment, level=0, parent_comment_author=random_post.get('author'))
+
+    with col2:
+        postID = st.text_input('Reddit Post ID', value=random_post.get('id'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
+        st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: center;} </style>', unsafe_allow_html=True)
+        choose1 = st.radio("To the best of your knowledge is this truthful?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+        choose2 = st.radio("If false how harmful would this information be?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+        choose3 = st.radio("Does this information come from supported information (opt)?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+        choose4 = st.radio("Does this response answer the initial question?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+        choose5 = st.radio("Does response show evidence of reasoning?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+
+        user_input = {"Username": userID, "Reddit Post ID": postID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
+
+        key = (userID, postID)  # Use a tuple as the key
+
+        if st.button("Submit"):
+            if user_input:
+                session_state.set(key, user_input)
+                st.success(f"Data '{user_input}' added to the session with key {key}")
+
+        delete_options = list(session_state._state.keys())  # Get the keys for delete options
+        delete_options.insert(0, 'None')  # Add 'None' as the default option
+        delete_key = st.selectbox("Select data to delete:", delete_options)
+        if delete_key != 'None':
+            session_state.delete(delete_key)
+            st.success(f"Data with key {delete_key} deleted from the session")
+
+        # Display the session data
+        st.write("Session Data:")
+        if session_state._state:
+            for key, data in session_state._state.items():
+                st.write(f"Key: {key}, Data: {data}")
+
+        # When you want to export user input to Google Sheets
+        if st.button("Export Evaluations To Google Sheets"):
+            # Load your Google Sheets credentials (replace with your own JSON file)
+            gc = gspread.service_account(filename="llms-for-misinformation-196fdd9cebe7.json")
+
+            # Iterate through all the user inputs in the session and update/append them to Google Sheets
+            for key, user_input in session_state._state.items():
+                update_or_append_data(gc, sheet_url, user_input)
+
+            st.success("Data successfully added to Google Sheets.")
 
 # Function to find and update a row based on userID and postID
 def update_or_append_data(gc, sheet_url, user_input):
@@ -98,6 +161,14 @@ def update_or_append_data(gc, sheet_url, user_input):
         worksheet.append_row(list(user_input.values()))
         st.success("Data appended to Google Sheets.")
 
+# Function to load a random post
+def load_random_post(selected_subreddit):
+    if selected_subreddit in data:
+        all_posts = data[selected_subreddit]
+        if all_posts:
+            random_post = random.choice(all_posts)
+            return random_post
+    return None
 
 # Header
 with st.container():
@@ -128,7 +199,7 @@ with st.container():
 
     # Streamlit app title and introduction
     st.title("Reddit Data Scraper")
-    st.write("Enter a subreddit name and the range of posts you want to scrape (up to the top 100).")
+    st.write("Enter a subreddit name to scrape one random post at a time.")
 
     # Sidebar input fields
     st.write(
@@ -145,96 +216,83 @@ with st.container():
         """
     )
 
-    # Load your JSON data
-    with open('reddit_data1.json', 'r') as json_file:
-        data = json.load(json_file)
+    userID = st.sidebar.text_input('Your UserID', value="", max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
 
-    # Extract the list of available subreddits from your JSON data
-    subreddits = list(data.keys())
+    if userID:
+        # Load your JSON data
+        with open('reddit_data1.json', 'r') as json_file:
+            data = json.load(json_file)
 
-    # Create a Streamlit dropdown menu for subreddit selection
-    selected_subreddit = st.sidebar.selectbox("Select a Subreddit", subreddits)
+        # Create a Streamlit dropdown menu for subreddit selection
+        selected_subreddit = st.sidebar.selectbox("Select a Subreddit", list(data.keys()))
 
-    # If your JSON data contains posts under the key "posts," extract them
-    if selected_subreddit in data:
-        all_posts = data[selected_subreddit]
+        if st.sidebar.button("Load Post"):
+            # Load a new random post and store it in the session state
+            st.session_state.random_post = load_random_post(selected_subreddit)
 
-        # Get the total number of posts
-        total_posts = len(all_posts)
+        # Get the updated random_post
+        random_post = st.session_state.random_post
 
-        # Sidebar input fields for selecting the range
-        st.write("Select the range of posts to display:")
-        start_post = st.sidebar.slider("Start Post", 1, total_posts, 1)
-        end_post = st.sidebar.slider("End Post", start_post, total_posts, total_posts)
-    else:
-            st.write("No 'posts' found in your JSON data.")
+        if random_post:
+            # Create two columns for post and evaluation side-by-side
+            col1, col2 = st.columns(2)
 
-    # Button to load data
-    if st.sidebar.button("Load"):
-            
-        st.write(f"Loading posts {start_post} to {end_post} from r/{selected_subreddit}...")
+            with col1:
+                # Display the post content
+                st.write(f"Title: {random_post.get('title')}")
+                st.write("Post ID:", random_post.get('id'))
+                st.write("Author:", random_post.get('author'))
 
-        # Extract and display the selected range of posts
-        selected_posts = all_posts[start_post - 1:end_post]
+                permalink = random_post.get('permalink')
+                base_url = "https://www.reddit.com"
+                full_url = base_url + permalink
+                st.write("URL:", full_url)
 
-        # Inject CSS
-        st.markdown(css, unsafe_allow_html=True)
+                # Display the post content
+                st.write("Post Content:", random_post.get('selftext'))
 
-        # Use a horizontal scrollable container for posts
-        post_container = st.container()
-        with post_container:
-            for post in selected_posts:
-                with st.expander(f"Title: {post.get('title')}"):
-                    st.write("Post ID:", post.get('id'))
-                    st.write("Author:", post.get('author'))
-                    st.write("Score:", post.get('score'))
-                    permalink = post.get('permalink')
-                    base_url = "https://www.reddit.com"
-                    full_url = base_url + permalink
-                    st.write("URL:", full_url)
+                st.write("Comments:")
+                for comment in random_post.get('comments'):
+                    display_comments(comment, level=0, parent_comment_author=random_post.get('author'))
 
-                    st.write("Comments:")
-                    for comment in post.get('comments'):
-                        display_comments(comment, level=0, parent_comment_author=post.get('author'))
+            with col2:
+                postID = st.text_input('Reddit Post ID', value=random_post.get('id'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
+                st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: center;} </style>', unsafe_allow_html=True)
+                choose1 = st.radio("To the best of your knowledge is this truthful?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+                choose2 = st.radio("If false how harmful would this information be?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+                choose3 = st.radio("Does this information come from supported information (opt)?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+                choose4 = st.radio("Does this response answer the initial question?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+                choose5 = st.radio("Does response show evidence of reasoning?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
 
-    userID = st.text_input('Your UserID', value="", max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
-    postID = st.text_input('Reddit Post ID', value="", max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
-    st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: center;} </style>', unsafe_allow_html=True)
-    choose1 = st.radio("To the best of your knowledge is this truthful?",("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-    choose2 = st.radio("If false how harmful would this information be?",("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-    choose3 = st.radio("Does this information come from supported information (opt)?",("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-    choose4 = st.radio("Does this response answer the initial question?",("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-    choose5 = st.radio("Does response show evidence of reasoning?",("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+                user_input = {"Username": userID, "Reddit Post ID": postID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
 
-    user_input = {"Username": userID, "Reddit Post ID": postID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5} 
+                key = (userID, postID)  # Use a tuple as the key
 
-    key = (userID, postID)  # Use a tuple as the key
+                if st.button("Submit"):
+                    if user_input:
+                        session_state.set(key, user_input)
+                        st.success(f"Data '{user_input}' added to the session with key {key}")
 
-    if st.button("Submit"):
-        if user_input:
-            session_state.set(key, user_input)
-            st.success(f"Data '{user_input}' added to the session with key {key}.")
+                delete_options = list(session_state._state.keys())  # Get the keys for delete options
+                delete_options.insert(0, 'None')  # Add 'None' as the default option
+                delete_key = st.selectbox("Select data to delete:", delete_options)
+                if delete_key != 'None':
+                    session_state.delete(delete_key)
+                    st.success(f"Data with key {delete_key} deleted from the session")
 
-    delete_options = list(session_state._state.keys())  # Get the keys for delete options
-    delete_options.insert(0, 'None')  # Add 'None' as the default option
-    delete_key = st.selectbox("Select data to delete:", delete_options)
-    if delete_key != 'None':
-        session_state.delete(delete_key)
-        st.success(f"Data with key {delete_key} deleted from the session.")
+                # Display the session data
+                st.write("Session Data:")
+                if session_state._state:
+                    for key, data in session_state._state.items():
+                        st.write(f"Key: {key}, Data: {data}")
 
-    # Display the session data
-    st.write("Session Data:")
-    if session_state._state:
-        for key, data in session_state._state.items():
-            st.write(f"Key: {key}, Data: {data}")
+                # When you want to export user input to Google Sheets
+                if st.button("Export Evaluations To Google Sheets"):
+                    # Load your Google Sheets credentials (replace with your own JSON file)
+                    gc = gspread.service_account(filename="llms-for-misinformation-196fdd9cebe7.json")
 
-    # When you want to export user input to Google Sheets
-    if st.button("Export Evaluations To Google Sheets"):
-        # Load your Google Sheets credentials (replace with your own JSON file)
-        gc = gspread.service_account(filename="llms-for-misinformation-196fdd9cebe7.json")
+                    # Iterate through all the user inputs in the session and update/append them to Google Sheets
+                    for key, user_input in session_state._state.items():
+                        update_or_append_data(gc, sheet_url, user_input)
 
-        # Iterate through all the user inputs in the session and update/append them to Google Sheets
-        for key, user_input in session_state._state.items():
-            update_or_append_data(gc, sheet_url, user_input)
-
-        st.success("Data successfully added to Google Sheets.")
+                    st.success("Data successfully added to Google Sheets.")
