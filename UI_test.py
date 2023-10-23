@@ -103,8 +103,11 @@ def load_random_post(selected_subreddit):
     if selected_subreddit in data:
         all_posts = data[selected_subreddit]
         if all_posts:
-            random_post = random.choice(all_posts)
-            return random_post
+            # Filter out posts with no comments
+            valid_posts = [post for post in all_posts if post.get('comments')]
+            if valid_posts:
+                random_post = random.choice(valid_posts)
+                return random_post
     return None
 
 # Header
