@@ -149,7 +149,6 @@ with st.container():
         - Skin
         - AskDocs
         - Dermatology
-        - SkincareAddictions
         - Popping
         - Hair
         - SkincareAddicts
