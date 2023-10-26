@@ -166,6 +166,8 @@ with st.container():
         selected_subreddit = st.sidebar.selectbox("Select a Subreddit", list(data.keys()))
 
         if st.sidebar.button("Load Post"):
+            if "random_post" not in st.session_state:
+                st.session_state.random_post = None
             # Load a new random post and store it in the session state
             st.session_state.random_post = load_random_post(selected_subreddit)
 
