@@ -168,6 +168,7 @@ with st.container():
         if st.sidebar.button("Load Post"):
             if "random_post" not in st.session_state:
                 st.session_state.random_post = None
+
             # Load a new random post and store it in the session state
             st.session_state.random_post = load_random_post(selected_subreddit)
 
@@ -176,7 +177,7 @@ with st.container():
 
         if random_post:
             # Create two columns for post and evaluation side-by-side
-            col1, col2 = st.columns(2)
+            col1, col2 = st.columns([9, 13])
 
             with col1:
                 # Display the post content
