@@ -62,6 +62,10 @@ class SessionState:
 # Create a session state
 session_state = SessionState(st.session_state)
 
+# Initialize 'random_post' in session_state
+if 'random_post' not in st.session_state:
+    st.session_state.random_post = None
+
 # Function to display comments recursively in a threaded format
 def display_comments(comment, level, parent_comment_author):
     st.write('<div class="comment">', unsafe_allow_html=True)
@@ -228,9 +232,11 @@ with st.container():
                 thumbnail = random_post.get('thumbnail')
                 if thumbnail and thumbnail != "self" and thumbnail != "null":
                     st.write("Thumbnail URL: " + str(thumbnail))
-                    if thumbnail != "nsfw":
+                    if thumbnail != "nsfw" and thumbnail != "spoiler":
                         # Display the image using st.image
                         st.image(thumbnail, caption='Thumbnail Image', width=random_post.get('thumbnail_width'))
+                    else:
+                        st.write("Click on URL to see image. Cannot display here.")
 
                 # Display the post content
                 st.write("Post Content:", random_post.get('selftext'))
