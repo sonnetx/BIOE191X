@@ -68,7 +68,8 @@ def display_comments(comment, level, parent_comment_author):
     st.write(f"**{comment.get('author')}** (Reply to {parent_comment_author}):", unsafe_allow_html=True)
     st.write(f"<p style='margin-left: {10 * level}px; margin-bottom: 1px;'>{comment.get('body')}</p>", unsafe_allow_html=True)
     for reply in comment.get('replies'):
-        display_comments(reply, level + 1, comment.get('author'))
+        if reply != "[removed]":
+            display_comments(reply, level + 1, comment.get('author'))
     st.write('</div>', unsafe_allow_html=True)
 
 # Function to find and update a row based on userID and postID
@@ -98,13 +99,45 @@ def update_or_append_data(gc, sheet_url, user_input):
         worksheet.append_row(list(user_input.values()))
         st.success("Data appended to Google Sheets.")
 
+# Modify the preprocess_json_data function to separate posts by comments at depth=0 and add metadata
+def preprocess_json_data(data):
+    new_data = {}
+    for subreddit, posts in data.items():
+        new_data[subreddit] = []
+
+        for post in posts:
+            # Check the number of comments at depth=0
+            comments_depth_0 = [comment for comment in post['comments'] if comment['depth'] == 0]
+
+            if comments_depth_0:
+                for i, comment in enumerate(comments_depth_0):
+                    # Create a new post with metadata including comment index
+                    new_post = {
+                        'title': post['title'],
+                        'author': post['author'],
+                        'id': post['id'],
+                        'permalink': post['permalink'],
+                        'selftext': comment['body'],
+                        'comments': [comment],  # Only include the comment at depth=0
+                        'comment_index': i,  # Add the comment index
+                        'thumbnail': post['thumbnail'],
+                        'thumbnail_width': post['thumbnail_width']
+                    }
+                    new_data[subreddit].append(new_post)
+
+    return new_data
+
 # Function to load a random post
 def load_random_post(selected_subreddit):
     if selected_subreddit in data:
         all_posts = data[selected_subreddit]
         if all_posts:
             # Filter out posts with no comments
-            valid_posts = [post for post in all_posts if post.get('comments') and not all(comment['author'] == 'AutoModerator' or comment['author'] == 'None' for comment in post['comments'])]
+            valid_posts = [
+                post for post in all_posts
+                if post.get('comments') != "[Removed]"  # Check if comments are not "[Removed]"
+                and post.get('comments') and not all(comment['author'] == 'AutoModerator' or comment['author'] == 'None' for comment in post['comments'])
+            ]
             if valid_posts:
                 random_post = random.choice(valid_posts)
                 return random_post
@@ -161,6 +194,7 @@ with st.container():
         # Load your JSON data
         with open('reddit_data1.json', 'r') as json_file:
             data = json.load(json_file)
+            data = preprocess_json_data(data)
 
         # Create a Streamlit dropdown menu for subreddit selection
         selected_subreddit = st.sidebar.selectbox("Select a Subreddit", list(data.keys()))
@@ -190,6 +224,14 @@ with st.container():
                 full_url = base_url + permalink
                 st.write("URL:", full_url)
 
+                # Check if there's a thumbnail and it's not "self" or null
+                thumbnail = random_post.get('thumbnail')
+                if thumbnail and thumbnail != "self" and thumbnail != "null":
+                    st.write("Thumbnail URL: " + str(thumbnail))
+                    if thumbnail != "nsfw":
+                        # Display the image using st.image
+                        st.image(thumbnail, caption='Thumbnail Image', width=random_post.get('thumbnail_width'))
+
                 # Display the post content
                 st.write("Post Content:", random_post.get('selftext'))
 
@@ -199,6 +241,7 @@ with st.container():
 
             with col2:
                 postID = st.text_input('Reddit Post ID', value=random_post.get('id'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
+                commentID = st.text_input('Comment ID', value=random_post.get('comment_index'), max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
                 st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: center;} </style>', unsafe_allow_html=True)
                 choose1 = st.radio("To the best of your knowledge is this truthful?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
                 choose2 = st.radio("If false how harmful would this information be?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
@@ -206,9 +249,9 @@ with st.container():
                 choose4 = st.radio("Does this response answer the initial question?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
                 choose5 = st.radio("Does response show evidence of reasoning?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
 
-                user_input = {"Username": userID, "Reddit Post ID": postID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
+                user_input = {"Username": userID, "Reddit Post ID": postID, "Comment ID": commentID, "Q1": choose1, "Q2": choose2, "Q3": choose3, "Q4": choose4, "Q5": choose5}
 
-                key = (userID, postID)  # Use a tuple as the key
+                key = (userID, postID, commentID)  # Use a tuple as the key
 
                 if st.button("Submit"):
                     if user_input:
