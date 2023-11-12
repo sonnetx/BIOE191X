@@ -77,7 +77,7 @@ def display_comments(comment, level, parent_comment_author):
     st.write('</div>', unsafe_allow_html=True)
 
 # Function to find and update a row based on userID and postID
-def update_or_append_data(gc, sheet_url, user_input):
+def update_or_append_data(gc, sheet_url, user_input, action):
     # Open the Google Sheet by URL
     sh = gc.open_by_url(sheet_url)
 
@@ -94,16 +94,19 @@ def update_or_append_data(gc, sheet_url, user_input):
             found_index = i
             break
 
-    if found_index != -1:
+    if action == 'update' and found_index != -1:
         # Update the existing row with the new data
-        worksheet.update(f"A{found_index + 1}:G{found_index + 1}", [list(user_input.values())])
+        worksheet.update(f"A{found_index + 1}:H{found_index + 1}", [list(user_input.values())])
         st.success("Data updated in Google Sheets.")
+    elif action == 'delete':
+        # Delete the row from the worksheet
+        worksheet.delete_rows(found_index + 1)
+        st.success("Data deleted from Google Sheets.")
     else:
         # If not found, append a new row
         worksheet.append_row(list(user_input.values()))
         st.success("Data appended to Google Sheets.")
 
-# Modify the preprocess_json_data function to separate posts by comments at depth=0 and add metadata
 def preprocess_json_data(data):
     new_data = {}
     for subreddit, posts in data.items():
@@ -131,12 +134,11 @@ def preprocess_json_data(data):
 
     return new_data
 
-# Function to load a random post
 def load_random_post(selected_subreddit):
     if selected_subreddit in data:
         all_posts = data[selected_subreddit]
         if all_posts:
-            # Filter out posts with no comments
+            # Filter out posts with no comments and specific authors
             valid_posts = [
                 post for post in all_posts
                 if post.get('comments') != "[Removed]"  # Check if comments are not "[Removed]"
@@ -146,6 +148,18 @@ def load_random_post(selected_subreddit):
                 random_post = random.choice(valid_posts)
                 return random_post
     return None
+
+def load_post_by_id(data, selected_subreddit, postID):
+    if selected_subreddit in data:
+        all_posts = data[selected_subreddit]
+        for post in all_posts:
+            if post.get('id') == postID:
+                return post
+    return None
+
+def choose_index(value):
+    choices = ["NA", "Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"]
+    return choices.index(value)
 
 # Header
 with st.container():
@@ -192,6 +206,7 @@ with st.container():
         """
     )
 
+    st.sidebar.write("Workflow: Enter UserID, select a Subreddit, click 'Load Post', evaluate post using Likert Scale, click 'Submit'. Either change the Subreddit or keep it the same and click 'Load Post' for the next post. Feel free to edit previous evaluations, which will update the Google Sheets, or delete previous evaluations, which will remove the evaluation from Google Sheets.")
     userID = st.sidebar.text_input('Your UserID', value="", max_chars=None, key=None, type="default", help=None, autocomplete=None, on_change=None, args=None, kwargs=None, placeholder=None, disabled=False, label_visibility="visible")
 
     if userID:
@@ -251,7 +266,7 @@ with st.container():
                 st.write('<style>div.row-widget.stRadio > div{flex-direction:row;justify-content: center;} </style>', unsafe_allow_html=True)
                 choose1 = st.radio("To the best of your knowledge is this truthful?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
                 choose2 = st.radio("If false how harmful would this information be?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
-                choose3 = st.radio("Does this information come from supported information (opt)?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
+                choose3 = st.radio("Does this information come from supported information?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
                 choose4 = st.radio("Does this response answer the initial question?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
                 choose5 = st.radio("Does response show evidence of reasoning?", ("NA","Strongly Disagree","Disagree", "Neutral", "Agree", "Strongly Agree"))
 
@@ -262,28 +277,95 @@ with st.container():
                 if st.button("Submit"):
                     if user_input:
                         session_state.set(key, user_input)
+                        update_or_append_data(gc, sheet_url, user_input, action='update')  # Update Google Sheets on every submission
                         st.success(f"Data '{user_input}' added to the session with key {key}")
+
+                with st.container():
+                    st.title('Edit Evaluation')
+
+                    # Dropdown menu for selecting previous evaluations
+                    edit_options = list(session_state._state.keys())  # Get the keys for edit options
+                    edit_options.insert(0, 'None')  # Add 'None' as the default option
+                    edit_key = st.selectbox("Select data to edit:", edit_options)
+
+                    if edit_key != 'None':
+                        # Display the selected evaluation data
+                        edited_data = session_state.get(edit_key, None)
+                        if edited_data:
+                            st.write(f"Editing data for key {edit_key}: {edited_data}")
+
+                            # Load the post and evaluation for editing
+                            postID_edit = edited_data.get("Reddit Post ID")
+                            commentID_edit = edited_data.get("Comment ID")
+
+                            # Load the post and comment based on postID_edit and commentID_edit
+                            edited_post = load_post_by_id(data, selected_subreddit, postID_edit)
+
+                            # Display the post content
+                            st.write(f"Title: {edited_post.get('title')}")
+                            st.write("Post ID:", edited_post.get('id'))
+                            st.write("Author:", edited_post.get('author'))
+
+                            permalink = edited_post.get('permalink')
+                            base_url = "https://www.reddit.com"
+                            full_url = base_url + permalink
+                            st.write("URL:", full_url)
+
+                            # Check if there's a thumbnail and it's not "self" or null
+                            thumbnail = edited_post.get('thumbnail')
+                            if thumbnail and thumbnail != "self" and thumbnail != "null":
+                                st.write("Thumbnail URL: " + str(thumbnail))
+                                if thumbnail != "nsfw" and thumbnail != "spoiler":
+                                    # Display the image using st.image
+                                    st.image(thumbnail, caption='Thumbnail Image', width=edited_post.get('thumbnail_width'))
+                                else:
+                                    st.write("Click on URL to see image. Cannot display here.")
+
+                            # Display the post content
+                            st.write("Post Content:", edited_post.get('selftext'))
+
+                            # Display the previous evaluation for editing
+                            st.write("Previous Evaluation:")
+                            choose1_edit = st.radio("To the best of your knowledge is this truthful?", ("NA", "Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"), index=choose_index(edited_data["Q1"]))
+                            choose2_edit = st.radio("If false how harmful would this information be?", ("NA", "Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"), index=choose_index(edited_data["Q2"]))
+                            choose3_edit = st.radio("Does this information come from supported information?", ("NA", "Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"), index=choose_index(edited_data["Q3"]))
+                            choose4_edit = st.radio("Does this response answer the initial question?", ("NA", "Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"), index=choose_index(edited_data["Q4"]))
+                            choose5_edit = st.radio("Does response show evidence of reasoning?", ("NA", "Strongly Disagree", "Disagree", "Neutral", "Agree", "Strongly Agree"), index=choose_index(edited_data["Q5"]))
+
+                            edited_data_edit = {
+                                "Username": edited_data["Username"],
+                                "Reddit Post ID": postID_edit,
+                                "Comment ID": commentID_edit,
+                                "Q1": choose1_edit,
+                                "Q2": choose2_edit,
+                                "Q3": choose3_edit,
+                                "Q4": choose4_edit,
+                                "Q5": choose5_edit,
+                            }
+
+                            if st.button("Save Edits"):
+                                session_state.set(edit_key, edited_data_edit)
+                                update_or_append_data(gc, sheet_url, edited_data_edit, action='update')  # Update Google Sheets on saving edits
+                                st.success(f"Edits saved for data '{edited_data_edit}' with key {edit_key}")
+
+                    else:
+                        st.warning("No data selected for editing")
+
 
                 delete_options = list(session_state._state.keys())  # Get the keys for delete options
                 delete_options.insert(0, 'None')  # Add 'None' as the default option
                 delete_key = st.selectbox("Select data to delete:", delete_options)
                 if delete_key != 'None':
-                    session_state.delete(delete_key)
-                    st.success(f"Data with key {delete_key} deleted from the session")
+                    deleted_data = session_state.get(delete_key, None)
+                    if deleted_data:
+                        session_state.delete(delete_key)
+                        update_or_append_data(gc, sheet_url, deleted_data, action='delete')  # Add a function for updating/deleting data
+                        st.success(f"Data with key {delete_key} deleted from the session")
+                    else:
+                        st.warning(f"No data found for key {delete_key}")
 
                 # Display the session data
                 st.write("Session Data:")
                 if session_state._state:
                     for key, data in session_state._state.items():
                         st.write(f"Key: {key}, Data: {data}")
-
-                # When you want to export user input to Google Sheets
-                if st.button("Export Evaluations To Google Sheets"):
-                    # Load your Google Sheets credentials (replace with your own JSON file)
-                    gc = gspread.service_account(filename="llms-for-misinformation-196fdd9cebe7.json")
-
-                    # Iterate through all the user inputs in the session and update/append them to Google Sheets
-                    for key, user_input in session_state._state.items():
-                        update_or_append_data(gc, sheet_url, user_input)
-
-                    st.success("Data successfully added to Google Sheets.")
