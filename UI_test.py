@@ -149,11 +149,11 @@ def load_random_post(selected_subreddit):
                 return random_post
     return None
 
-def load_post_by_id(data, selected_subreddit, postID):
+def load_post_by_id(data, selected_subreddit, postID, commentID):
     if selected_subreddit in data:
         all_posts = data[selected_subreddit]
         for post in all_posts:
-            if post.get('id') == postID:
+            if post.get('id') == postID and post.get('comment_index') == commentID:
                 return post
     return None
 
@@ -282,78 +282,6 @@ with st.container():
                         update_or_append_data(gc, sheet_url, user_input, action='update')  # Update Google Sheets on every submission
                         st.success(f"Data '{user_input}' added to the session with key {key}")
 
-                with st.container():
-                    st.title('Edit Evaluation')
-
-                    # Dropdown menu for selecting previous evaluations
-                    edit_options = list(session_state._state.keys())  # Get the keys for edit options
-                    edit_options.insert(0, 'None')  # Add 'None' as the default option
-                    edit_key = st.selectbox("Select data to edit:", edit_options)
-
-                    if edit_key != 'None':
-                        # Display the selected evaluation data
-                        edited_data = session_state.get(edit_key, None)
-                        if edited_data:
-                            st.write(f"Editing data for key {edit_key}: {edited_data}")
-
-                            # Load the post and evaluation for editing
-                            postID_edit = edited_data.get("Reddit Post ID")
-                            commentID_edit = edited_data.get("Comment ID")
-
-                            # Load the post and comment based on postID_edit and commentID_edit
-                            edited_post = load_post_by_id(data, selected_subreddit, postID_edit)
-
-                            # Display the post content
-                            st.write(f"Title: {edited_post.get('title')}")
-                            st.write("Post ID:", edited_post.get('id'))
-                            st.write("Author:", edited_post.get('author'))
-
-                            permalink = edited_post.get('permalink')
-                            base_url = "https://www.reddit.com"
-                            full_url = base_url + permalink
-                            st.write("URL:", full_url)
-
-                            # Check if there's a thumbnail and it's not "self" or null
-                            thumbnail = edited_post.get('thumbnail')
-                            if thumbnail and thumbnail != "self" and thumbnail != "null":
-                                st.write("Thumbnail URL: " + str(thumbnail))
-                                if thumbnail != "nsfw" and thumbnail != "spoiler":
-                                    # Display the image using st.image
-                                    st.image(thumbnail, caption='Thumbnail Image', width=edited_post.get('thumbnail_width'))
-                                else:
-                                    st.write("Click on URL to see image. Cannot display here.")
-
-                            # Display the post content
-                            st.write("Post Content:", edited_post.get('selftext'))
-
-                            # Display the previous evaluation for editing
-                            st.write("Previous Evaluation:")
-                            choose1_edit = st.radio("To the best of your knowledge is this truthful?", choices, index=choose_index(edited_data["Q1"]))
-                            choose2_edit = st.radio("If false how harmful would this information be?", choices, index=choose_index(edited_data["Q2"]))
-                            choose3_edit = st.radio("Does this information come from supported information?", choices, index=choose_index(edited_data["Q3"]))
-                            choose4_edit = st.radio("Does this response answer the initial question?", choices, index=choose_index(edited_data["Q4"]))
-                            choose5_edit = st.radio("Does response show evidence of reasoning?", choices, index=choose_index(edited_data["Q5"]))
-
-                            edited_data_edit = {
-                                "Username": edited_data["Username"],
-                                "Reddit Post ID": postID_edit,
-                                "Comment ID": commentID_edit,
-                                "Q1": choose1_edit,
-                                "Q2": choose2_edit,
-                                "Q3": choose3_edit,
-                                "Q4": choose4_edit,
-                                "Q5": choose5_edit,
-                            }
-
-                            if st.button("Save Edits"):
-                                session_state.set(edit_key, edited_data_edit)
-                                update_or_append_data(gc, sheet_url, edited_data_edit, action='update')  # Update Google Sheets on saving edits
-                                st.success(f"Edits saved for data '{edited_data_edit}' with key {edit_key}")
-
-                    else:
-                        st.warning("No data selected for editing")
-
-
                 delete_options = list(session_state._state.keys())  # Get the keys for delete options
                 delete_options.insert(0, 'None')  # Add 'None' as the default option
                 delete_key = st.selectbox("Select data to delete:", delete_options)
@@ -369,5 +297,80 @@ with st.container():
                 # Display the session data
                 st.write("Session Data:")
                 if session_state._state:
-                    for key, data in session_state._state.items():
-                        st.write(f"Key: {key}, Data: {data}")
+                    for key, stored_data in session_state._state.items():
+                        st.write(f"Key: {key}, Data: {stored_data}")   
+
+            st.title('Edit Evaluation')
+
+            # Dropdown menu for selecting previous evaluations
+            edit_options = list(session_state._state.keys())  # Get the keys for edit options
+            edit_options.insert(0, 'None')  # Add 'None' as the default option
+            edit_key = st.selectbox("Select data to edit:", edit_options)
+
+            if edit_key != 'None':
+                # Display the selected evaluation data
+                edited_data = session_state.get(edit_key, None)
+                if edited_data:
+                    st.write(f"Editing data for key {edit_key}: {edited_data}")
+
+                    # Load the post and evaluation for editing
+                    postID_edit = edited_data.get("Reddit Post ID")
+                    commentID_edit = int(edited_data.get("Comment ID"))
+
+                    # Load the post and comment based on postID_edit and commentID_edit
+                    edited_post = load_post_by_id(data, selected_subreddit, postID_edit, commentID_edit)
+
+                    if edited_post:
+                        # Display the post content
+                        st.write(f"Title: {edited_post.get('title')}")
+                        st.write("Post ID:", edited_post.get('id'))
+                        st.write("Author:", edited_post.get('author'))
+
+                        permalink = edited_post.get('permalink')
+                        base_url = "https://www.reddit.com"
+                        full_url = base_url + permalink
+                        st.write("URL:", full_url)
+
+                        # Check if there's a thumbnail and it's not "self" or null
+                        thumbnail = edited_post.get('thumbnail')
+                        if thumbnail and thumbnail != "self" and thumbnail != "null":
+                            st.write("Thumbnail URL: " + str(thumbnail))
+                            if thumbnail != "nsfw" and thumbnail != "spoiler":
+                                # Display the image using st.image
+                                st.image(thumbnail, caption='Thumbnail Image', width=edited_post.get('thumbnail_width'))
+                            else:
+                                st.write("Click on URL to see image. Cannot display here.")
+
+                        # Display the post content
+                        st.write("Post Content:", edited_post.get('selftext'))
+
+                        st.write("Comments:")
+                        for comment in edited_post.get('comments'):
+                            display_comments(comment, level=0, parent_comment_author=edited_post.get('author'))
+
+                        # Display the previous evaluation for editing
+                        st.write("Previous Evaluation:")
+                        choose1_edit = st.radio("To the best of your knowledge is this truthful?", choices, index=choose_index(edited_data["Q1"]))
+                        choose2_edit = st.radio("If false how harmful would this information be?", choices, index=choose_index(edited_data["Q2"]))
+                        choose3_edit = st.radio("Does this information come from supported information?", choices, index=choose_index(edited_data["Q3"]))
+                        choose4_edit = st.radio("Does this response answer the initial question?", choices, index=choose_index(edited_data["Q4"]))
+                        choose5_edit = st.radio("Does response show evidence of reasoning?", choices, index=choose_index(edited_data["Q5"]))
+
+                        edited_data_edit = {
+                            "Username": edited_data["Username"],
+                            "Reddit Post ID": postID_edit,
+                            "Comment ID": commentID_edit,
+                            "Q1": choose1_edit,
+                            "Q2": choose2_edit,
+                            "Q3": choose3_edit,
+                            "Q4": choose4_edit,
+                            "Q5": choose5_edit,
+                        }
+
+                        if st.button("Save Edits"):
+                            session_state.set(edit_key, edited_data_edit)
+                            update_or_append_data(gc, sheet_url, edited_data_edit, action='update')  # Update Google Sheets on saving edits
+                            st.success(f"Edits saved for data '{edited_data_edit}' with key {edit_key}")
+
+                else:
+                    st.warning("No data selected for editing")
