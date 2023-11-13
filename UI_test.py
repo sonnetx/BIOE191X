@@ -124,8 +124,9 @@ def preprocess_json_data(data):
                         'author': post['author'],
                         'id': post['id'],
                         'permalink': post['permalink'],
-                        'selftext': comment['body'],
+                        'selftext': post['selftext'],
                         'comments': [comment],  # Only include the comment at depth=0
+                        'comment_body': comment['body'],
                         'comment_index': i,  # Add the comment index
                         'thumbnail': post['thumbnail'],
                         'thumbnail_width': post['thumbnail_width']
@@ -254,6 +255,7 @@ with st.container():
                         st.write("Click on URL to see image. Cannot display here.")
 
                 # Display the post content
+                print(random_post)
                 st.write("Post Content:", random_post.get('selftext'))
 
                 st.write("Comments:")
